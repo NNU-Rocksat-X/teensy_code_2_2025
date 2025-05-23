@@ -49,10 +49,6 @@
 #define lim_switch_b 40
 #define lim_switch_c 41
 
-#define launcher_extend_collapse_pos_goal 9000
-#define launcher_extend_collapse_speed 200
-#define launch_ball_pos_goal 1800
-#define launch_ball_speed 500
 
 int32_t position_cmds[NUM_JOINTS];
 int32_t encoder_positions[NUM_JOINTS];
@@ -121,31 +117,101 @@ Encoder myEncoder[] = {
 };
 
 
-
-int velocity[6];
+int velocity[6];        //            HEY RILEY SHOULD THIS BE NUM_JOINTS INSTEAD OF 6?
 //Encoder(enc_pin_8A, enc_pin_8B)};
 
-bool Launcher_Extend_Trigger = false;
-bool Launcher_Collapse_Trigger = false;
-bool Launcher_Ejection_Trigger = false;
 
+//****************************************    High Level Code       ****************************************
+
+
+
+int main(void) 
+{
+
+  setup();
+  //zeroing();
+  loop();
+
+}
+
+
+void setup(void) {
+  noInterrupts();
+  pinMode(13, OUTPUT);
+  initEncoders();
+  
+  //pinMode(13, OUTPUT);  // led pin to output      THIS WAS ALREADY HAPPENING
+
+
+
+  for (int ii = 0; ii < NUM_JOINTS; ++ii) {
+    tasks[ii].state = false;
+    tasks[ii].elapsedTime = 0;
+    tasks[ii].period = 1'000'000UL;
+    position_cmds[ii] = myEncoder[ii].read();
+  }   // This used to not be a for loop
+
+
+  Timer1.initialize(10);             // interrupt every 10 us
+  Timer1.attachInterrupt(motorISR);  // motorISR is the ISR
+  Timer1.start();
+  
+  interrupts();
+
+  //setup_comm();
+  Serial1.begin(115200, SERIAL_8N1);
+  Serial.begin(115200);
+
+  Serial.println("Setup Complete");
+}
+
+
+void loop(void) {
+
+  while (1)
+  {
+    // Serial Recive
+    recieve_command();
+
+    // Read Encodors
+    sendEncoderValues();
+
+    // Serial Send
+    send_status();
+
+
+    //    sendEncoderValues();
+
+    for ( int ii = 0; ii < NUM_JOINTS; ++ii) {
+      tasks[ii].period = myStepper[ii].newFrequency(myEncoder[ii].read(), position_cmds[ii]);
+      //Serial.printf("motor %d  period = %lu µs\n", ii, tasks[ii].period);
+    }  // set the period of each motor based on the velocities recived from the jetson 
+
+
+
+    print_econder_values();
+    //print_target_values();
+
+
+    delay(10);
+  
+  }
+}
+
+
+
+//****************************************    Low Level Code       ****************************************
 
 /*
 **************************************** -=+ Encoder Transmit Sequence +=- *****************************************/
 // - Populates Encoder values
-
-
 void sendEncoderValues() {
   
   for(int ii = 0; ii < NUM_JOINTS; ++ii) 
   { 
     encoder_positions[ii] = myEncoder[ii].read();
-    
-    //Serial.print(encoder_positions[ii]);
-    //Serial.print(" ");
 
   }
-  //Serial.println(" ");
 }
 
 /***************************************** -=+ Initialize Encoders +=- *****************************************/
@@ -223,7 +289,8 @@ int recieve_command() {
 }
 
 // Serial Funtion
-int parse_message(const uint8_t* buf, int size) {
+int parse_message(const uint8_t* buf, int size) 
+{
 
   uint16_t calc_crc = 0;
   uint16_t rec_crc = 0;
@@ -251,8 +318,8 @@ int parse_message(const uint8_t* buf, int size) {
 
 
 // Serial Function
-int send_status() {
-
+int send_status() 
+{
   uint8_t buffer[256] = { 0 };
 
   if (sizeof(tnsy_sts) > sizeof(buffer)) 
@@ -281,7 +348,6 @@ int send_status() {
 }
 
 
-
 bool stepToPos(int dirPin, int stepPin, int goal_step_num, int direction, int delayTime, int current_step_num ) 
 { 
     // Set direction
@@ -299,118 +365,6 @@ bool stepToPos(int dirPin, int stepPin, int goal_step_num, int direction, int de
 }
 
 
-
-void setup(void) {
-  noInterrupts();
-  pinMode(13, OUTPUT);
-  initEncoders();
-  
-  //pinMode(13, OUTPUT);  // led pin to output      THIS WAS ALREADY HAPPENING
-
-
-
-  for (int ii = 0; ii < NUM_JOINTS; ++ii) {
-    tasks[ii].state = false;
-    tasks[ii].elapsedTime = 0;
-    tasks[ii].period = 1'000'000UL;
-    position_cmds[ii] = myEncoder[ii].read();
-  }   // This used to not be a for loop
-
-
-  Timer1.initialize(10);             // interrupt every 10 us
-  Timer1.attachInterrupt(motorISR);  // motorISR is the ISR
-  Timer1.start();
-  
-  interrupts();
-
-  //setup_comm();
-  Serial1.begin(115200, SERIAL_8N1);
-  Serial.begin(115200);
-
-  Serial.println("Setup Complete");
-}
-
-
-void loop(void) {
-
-  int extend_pos = 0, collapse_pos = 0, launch_ball_pos = 0;
-  bool do_extend = false, do_collapse = false, do_launch = false;
-
-  while (1)
-  {
-    // Serial Recive
-    recieve_command();
-
-    // Read Encodors
-    sendEncoderValues();
-
-    // Serial Send
-    send_status();
-
-
-    //    sendEncoderValues();
-
-    for ( int ii = 0; ii < NUM_JOINTS; ++ii) {
-      tasks[ii].period = myStepper[ii].newFrequency(myEncoder[ii].read(), position_cmds[ii]);
-      //Serial.printf("motor %d  period = %lu µs\n", ii, tasks[ii].period);
-    }  // set the period of each motor based on the velocities recived from the jetson 
-
-
-    
-
-    // Use limit swithces for Launching checking
-    Launcher_Extend_Trigger = readGPIOFast(lim_switch_a);
-    Launcher_Collapse_Trigger = readGPIOFast(lim_switch_b);
-    Launcher_Ejection_Trigger = readGPIOFast(lim_switch_c);
-    
-    /*
-
-    // Check for Luancher Commands (lactching logic)
-    if(Launcher_Extend_Trigger)
-    do_extend = true;
-
-    if(Launcher_Collapse_Trigger)
-    do_collapse = true;
-
-    if(Launcher_Ejection_Trigger)
-    do_launch = true;
-  
-
-    // Lathcing and Repeating Luaching Logic
-    if(do_extend) 
-    {
-      do_extend = stepToPos(step_pin_extend_launcher, dir_pin_extend_launcher, launcher_extend_collapse_pos_goal, 0, launcher_extend_collapse_speed, extend_pos);
-      ++extend_pos;
-    }
-    else { extend_pos = 0; }
-
-    if(do_collapse) 
-    {
-      do_collapse = stepToPos(step_pin_extend_launcher, dir_pin_extend_launcher, launcher_extend_collapse_pos_goal, 1, launcher_extend_collapse_speed, collapse_pos);
-      ++extend_pos;
-    }
-    else { extend_pos = 0; } 
-
-    if(do_launch) 
-    {
-      do_extend = stepToPos(step_pin_launch_ball, dir_pin_launch_ball, launch_ball_pos_goal, 0, launch_ball_speed, launch_ball_pos);
-      ++extend_pos;
-    }
-    else { extend_pos = 0; }       
-    
-    */
-
-    print_econder_values();
-    //print_target_values();
-
-
-    delay(10);
-  
-  }
-
-}
-
-
 void motorISR(void) {
   for (int ii = 0; ii < NUM_JOINTS; ++ii) {
 
@@ -425,47 +379,6 @@ void motorISR(void) {
     }
   }
 }
-
-/*
-void motorTest(void) {
-    Serial.println("Motor test begin...");
-
-    int stepperSel = 6;
-    
-    const int steps = 200;
-    const int stepDelay = 500; // microseconds
-
-    while(1)
-    {
-    // FORWARD
-    digitalWrite(dir_pin_6, HIGH); // Set direction forward
-    delay(100);
-    for (int i = 0; i < steps; i++) {
-        digitalWrite(step_pin_6, HIGH);
-        delayMicroseconds(stepDelay);
-        digitalWrite(step_pin_6, LOW);
-        sendEncoderValues();
-        delayMicroseconds(stepDelay);
-    }
-
-    delay(500);
-
-    // REVERSE
-    digitalWrite(dir_pin_6, LOW); // Set direction backward
-    delay(100);
-    for (int i = 0; i < steps; i++) {
-        digitalWrite(step_pin_6, HIGH);
-        delayMicroseconds(stepDelay);
-        digitalWrite(step_pin_6, LOW);
-        sendEncoderValues();
-        delayMicroseconds(stepDelay);
-    }
-
-    Serial.println("Motor test complete.");
-    }
-    
-}
-*/
 
 
 void zeroing(void)
@@ -522,18 +435,9 @@ bool readGPIOFast(int pin) {
 }
 
 
-int main(void) {
-
-  setup();
-
-  //motorTest();
-
-  //zeroing();
 
 
-  loop();
-
-}
+//****************************************    Print Functions       ****************************************
 
 
 void print_lim_swithces (bool a, bool b , bool c)
@@ -543,6 +447,8 @@ void print_lim_swithces (bool a, bool b , bool c)
   Serial.print(c);
   Serial.println(" ");
 }
+
+
 
 void print_econder_values (void)
 {
@@ -566,7 +472,6 @@ void print_target_values (void)
   }
   Serial.println(" ");
 }
-
 
 /*
 
