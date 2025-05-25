@@ -133,6 +133,10 @@ int main(void)
 
 /**
  * S E T U P
+ * 
+ * Initializes the LED, initializes the task scheduler, initializes the timer 
+ * interrupt with a 10 microsecond period. Starts the Jetson serial comm link
+ * with a 8N1 communication scheme and a baud rate of 115200.
  */
 void setup(void) {
   noInterrupts();
@@ -156,12 +160,12 @@ void setup(void) {
   Timer1.attachInterrupt(motorISR);  // motorISR is the ISR
   Timer1.start();
   
-  interrupts();
-
   Serial1.begin(115200, SERIAL_8N1);
   Serial.begin(115200);
 
   Serial.println("Setup Complete");
+
+  interrupts();
 }
 
 
@@ -268,6 +272,7 @@ int receive_command()
   }
   return 0;
 }
+
 
 /**
  * @brief - parses incoming serial messages 
@@ -503,6 +508,8 @@ void zeroing(void)
 
 /**
  * This seems like a funny way to do this... Why not use Arduino's digitalRead()?
+ * 
+ * TODO: remove/revisit chatgpt code
  */
 bool readGPIOFast(int pin) 
 {
