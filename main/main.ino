@@ -30,8 +30,6 @@
 #define step_pin_4 9
 #define step_pin_5 11
 #define step_pin_6 13
-#define step_pin_7 0 // TODO: this
-#define step_pin_8 0 // TODO: this
 
 #define step_pin_extend_launcher 3 //36
 #define step_pin_launch_ball 5 //28
@@ -42,8 +40,6 @@
 #define dir_pin_4 8
 #define dir_pin_5 10
 #define dir_pin_6 12
-#define dir_pin_7 0 // TODO: this
-#define dir_pin_8 0 // TODO: this
 
 #define dir_pin_extend_launcher 2 //37
 #define dir_pin_launch_ball 4 //29
@@ -58,11 +54,13 @@ int32_t position_cmds[NUM_JOINTS];
 int32_t encoder_positions[NUM_JOINTS];
 int prevEncoderPos = 0;
 
-// For Test Serial Communication
-static teensy_status_t tnsy_sts = { 0 };
-static teensy_command_t tnsy_cmd = { 0 };
+static teensy_status_t tnsy_sts = {0};
+static teensy_command_t tnsy_cmd = {0};
+static teensy_zero_t tnsy_zero = {0};
+static teensy_header_t tnsy_hdr = {0};
 
-typedef struct TaskScheduler {
+typedef struct TaskScheduler 
+{
   bool state;
   volatile int elapsedTime;
   int period;
@@ -70,11 +68,6 @@ typedef struct TaskScheduler {
 } scheduledTasks;
 
 scheduledTasks tasks[NUM_JOINTS];
-
-//void motorISR(void);
-
-//int tasksPerPeriod = 10;
-//int tasksNum = 6;
 
 // how many ISR cycles to stay on
 const int m1_OnTime = 1;
@@ -100,15 +93,16 @@ double velocities[NUM_JOINTS];
 
 uint32_t encoderValues[NUM_JOINTS];
 
-Stepper myStepper[] = { 
+Stepper myStepper[] = 
+{ 
   Stepper(step_pin_1, dir_pin_1, 1000, 1),
   Stepper(step_pin_2, dir_pin_2, 1000, 2),
   Stepper(step_pin_3, dir_pin_3, 300, 3),
   Stepper(step_pin_4, dir_pin_4, 300, 4),
   Stepper(step_pin_5, dir_pin_5, 300, 5),
   Stepper(step_pin_6, dir_pin_6, 300, 6),
-  Stepper(step_pin_7, dir_pin_7, 1000, 7),
-  Stepper(step_pin_8, dir_pin_8, 1000, 8)
+  Stepper(step_pin_extend_launcher, dir_pin_extend_launcher, 1000, 7),
+  Stepper(step_pin_launch_ball, dir_pin_launch_ball, 1000, 8)
 };
 
 
@@ -119,8 +113,8 @@ Encoder myEncoder[] = {
   Encoder(enc_pin_4A, enc_pin_4B),
   Encoder(enc_pin_5A, enc_pin_5B),
   Encoder(enc_pin_6A, enc_pin_6B)
-//Encoder(enc_pin_7A, enc_pin_7B)};
-//Encoder(enc_pin_8A, enc_pin_8B)};
+  // Encoder(enc_pin_7A, enc_pin_7B)};
+  // Encoder(enc_pin_8A, enc_pin_8B)};
 };
 
 //****************************************    High Level Code       ****************************************
@@ -149,9 +143,14 @@ void setup(void) {
   {
     tasks[ii].state = false;
     tasks[ii].elapsedTime = 0;
-    tasks[ii].period = 1'000'000UL;
-    position_cmds[ii] = myEncoder[ii].read();
-  }   // This used to not be a for loop
+    tasks[ii].period = 1000000;
+    
+    // dont init the last two encoders
+    if (myStepper[ii].motor_id == 7 || myStepper[ii].motor_id == 8)
+    {
+      position_cmds[ii] = myEncoder[ii].read();
+    }
+  }   // This used to not be a for loop      
 
   Timer1.initialize(10);             // interrupt every 10 us
   Timer1.attachInterrupt(motorISR);  // motorISR is the ISR
@@ -186,7 +185,7 @@ void loop(void) {
     // Serial Send
     send_status();
 
-    for ( int ii = 0; ii < NUM_JOINTS; ++ii) 
+    for ( int ii = 0; ii < NUM_JOINTS - NUM_EJCT_JOINTS; ++ii) 
     {
       tasks[ii].period = myStepper[ii].newFrequency(myEncoder[ii].read(), position_cmds[ii]);
       //Serial.printf("motor %d  period = %lu µs\n", ii, tasks[ii].period);
@@ -204,19 +203,23 @@ void loop(void) {
 
 //****************************************    Low Level Code       ****************************************
 
-/********************** -=+ Encoder Transmit Sequence +=- *********************/
-// - Populates Encoder values
+
+/**
+ * Reads the current position of all encoders
+ */
 void read_encoders() 
-{
-  
-  for(int ii = 0; ii < NUM_JOINTS; ++ii) 
+{ 
+  for(int ii = 0; ii < NUM_JOINTS - NUM_EJCT_JOINTS; ++ii) 
   { 
     encoder_positions[ii] = myEncoder[ii].read();
 
   }
 }
 
-/***************************************** -=+ Initialize Encoders +=- *****************************************/
+
+/**
+ * Initializes all encoders to zero 
+ */
 void initEncoders() 
 {
   for (int kk = 0; kk < NUM_JOINTS - NUM_EJCT_JOINTS; ++kk) 
@@ -225,15 +228,18 @@ void initEncoders()
   }
 }
 
+
 // Serial Function
-int receive_command() {
+int receive_command() 
+{
   uint8_t buffer[1024] = { 0 };
   uint8_t bytes_received = 0;
 
   while (Serial1.available()) 
   {
 
-    if (bytes_received >= sizeof(buffer)) {
+    if (bytes_received >= sizeof(buffer)) 
+    {
       Serial.println("Error: Buffer overflow!");
       return -1;
     }
@@ -244,10 +250,7 @@ int receive_command() {
     // Only parse when a full message is received
     if (bytes_received == sizeof(tnsy_cmd))
     {
-      //Serial.println("full message");
 
-
-      
       if (parse_message(&buffer[0], bytes_received) == 0) 
       {
         for (int j = 0; j < NUM_JOINTS; ++j) 
@@ -255,45 +258,22 @@ int receive_command() {
           position_cmds[j] = tnsy_cmd.setpoint_position[j];
         }
 
-      } else {
+      } 
+      else 
+      {
         return 2;
       }
     }
-          
-          /*
-          
-      digitalWrite(4, HIGH);      // Why is this controlling pin 4????
-      delay(500);
-      digitalWrite(4, LOW);
 
-      if (parse_message(&buffer[0], bytes_received) == 0) 
-      {
-        digitalWrite(4, HIGH);
-        delay(1000);
-        digitalWrite(4, LOW);
-
-        for (int j = 0; j < NUM_JOINTS; ++j) 
-        {
-          position_cmds[j] = tnsy_cmd.setpoint_position[j];
-        }
-
-        return 0;
-      } else {
-        Serial.println("Error: Invalid message received.");
-        digitalWrite(4, HIGH);
-        delay(100);
-        digitalWrite(4, LOW);
-
-        return 2;
-      }
-    }   */
-        
   }
   return 0;
 }
 
 /**
  * @brief - parses incoming serial messages 
+ * 
+ * @return int - -2 did not pass header, -1 did not pass CRC, OTHER: num corresponding 
+ *               to message type.
  */
 int parse_message(const uint8_t* buf, int size) 
 {
@@ -311,21 +291,42 @@ int parse_message(const uint8_t* buf, int size)
 
     if (calc_crc == rec_crc)
     {
-      //Serial.println(" memory copy and calc=rec");
+      memcpy(&tnsy_hdr, buf, size - 2);
 
-      memcpy(&tnsy_cmd, buf, size - 2);
+      // Added message type support. TODO: add this to the jetson
+      switch (tnsy_hdr.type)
+      {
+        case 0x00:
+          // TODO: update Jetson with correct message type for generic command message.
+          memcpy(&tnsy_cmd, buf, size - 2);
+          return 0;
+          break;
 
-      return 0;
+        case 0x01:
+          memcpy(&tnsy_cmd, buf, size - 2);
+          return 1;
+          break;
+
+        case 0x02:
+          memcpy(&tnsy_zero, buf, size - 2);
+          return 2;
+          break;
+
+        default:
+          Serial.print("Error with message parsing");
+          return -3;
+          break;
+      }
+
     } 
     else 
     {
-      return 2;
+      return -1;
     }
   } 
   else 
   {
-    // ROS_WARN("did not pass header");
-    return 1;
+    return -2;
   }
 }
 
@@ -383,7 +384,10 @@ bool stepToPos(int dirPin, int stepPin, int goal_step_num, int direction, int de
 }
 
 
-
+/** 
+ * Interrupt Service Routine for stepping the motors at the correct rate and to
+ * the correct position.
+ */
 void motorISR(void) 
 {
   for (int ii = 0; ii < NUM_JOINTS; ++ii) {
@@ -430,7 +434,7 @@ void zeroing(void)
                                                 myEncoder[0].read() + motor_speed);
 
     // Try to format your code so that its readable. One liners are typically a no-go
-    for (i = 0; i < NUM_JOINTS; ++i) 
+    for (i = 0; i < NUM_JOINTS - NUM_EJCT_JOINTS; ++i) 
     {
       if (i != 0)
       {
@@ -450,7 +454,7 @@ void zeroing(void)
   {
     tasks[1].period = myStepper[1].newFrequency(myEncoder[1].read(), 
                                                 myEncoder[1].read() + motor_speed);
-    for (i = 0; i < NUM_JOINTS; ++i) 
+    for (i = 0; i < NUM_JOINTS - NUM_EJCT_JOINTS; ++i) 
     {
       if (i != 1)
       {
@@ -472,7 +476,7 @@ void zeroing(void)
     tasks[2].period = myStepper[2].newFrequency(myEncoder[2].read(), 
                                                 myEncoder[2].read() + motor_speed);
 
-    for (i = 0; i < NUM_JOINTS; ++i) 
+    for (i = 0; i < NUM_JOINTS - NUM_EJCT_JOINTS; ++i) 
     {
       if (i != 2)
       {
@@ -488,12 +492,12 @@ void zeroing(void)
 
   initEncoders();
 
-  for (i = 1; i < NUM_JOINTS; ++i) 
+  for (i = 1; i < NUM_JOINTS - NUM_EJCT_JOINTS; ++i) 
   {
     tasks[i].period = myStepper[i].newFrequency(myEncoder[i].read(), 0);
   }  /// Keep all motors where they are
 
-  return 0;
+  return;
 }
 
 
@@ -520,7 +524,7 @@ void print_lim_switches (bool a, bool b , bool c)
 void print_encoder_values (void)
 {
   // Encoder readout  
-  for ( int i = 0; i < NUM_JOINTS; ++i)
+  for ( int i = 0; i < NUM_JOINTS - NUM_EJCT_JOINTS; ++i)
   {
     Serial.print(myEncoder[i].read());
     Serial.print(" ");
@@ -532,7 +536,7 @@ void print_encoder_values (void)
 void print_target_values (void)
 {
   // Encoder readout  
-  for ( int i = 0; i < NUM_JOINTS; ++i)
+  for ( int i = 0; i < NUM_JOINTS - NUM_EJCT_JOINTS; ++i)
   {
     Serial.print(position_cmds[i]);
     Serial.print(" ");

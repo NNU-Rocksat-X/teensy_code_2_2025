@@ -12,6 +12,8 @@ class Stepper{
     void currentVelocity(int currentPosition);  // populates the current velocity values on all the instances of this class
     double current_velocity;
     double velocity;
+    int motor_id;
+
 
   private:
     int step_pin;
@@ -20,7 +22,6 @@ class Stepper{
     int motorFrequency;
     bool highLow;
     int encoder_resolution;
-    int motor_id;
 
     int deg_to_step(int deg);
     double pid_controller(double desired_angle, double current_angle);
