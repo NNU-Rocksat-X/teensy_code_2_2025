@@ -123,15 +123,12 @@ Encoder myEncoder[] = {
 //Encoder(enc_pin_8A, enc_pin_8B)};
 };
 
-
-int velocity[NUM_JOINTS];        //            HEY RILEY SHOULD THIS BE NUM_JOINTS INSTEAD OF 6?
-//Encoder(enc_pin_8A, enc_pin_8B)};
-
-
 //****************************************    High Level Code       ****************************************
 
 
-
+/**
+ * Calls setup and loop 
+ */
 int main(void) 
 {
   setup();
@@ -195,7 +192,7 @@ void loop(void) {
       //Serial.printf("motor %d  period = %lu µs\n", ii, tasks[ii].period);
     } 
 
-    print_econder_values();
+    print_encoder_values();
     //print_target_values();
 
     delay(10);
@@ -416,7 +413,9 @@ void motorISR(void)
  * 
  * TODO: Add failure mode returns. What happens if a joint doesn't get to the 
  *       position within a reasonable time? Move on with the mission or should 
- *       it try indefinitely? I put my recommendation below. 
+ *       it try indefinitely? I put my recommendation for returns below. With
+ *       how unreliable the Rocksat arms have been in the past, this should be a
+ *       high priority task. 
  * 
  * @return int - 0 success, 1 timeout
  */
@@ -440,7 +439,7 @@ void zeroing(void)
     } /// Keep other motors where they are
     
     Serial.print("Check 1: ");
-    print_lim_swithces( lims[0] , lims[1], lims[2] );
+    print_lim_switches( lims[0] , lims[1], lims[2] );
     delay(5);
     lims[0] = readGPIOFast(lim_switch_a);
   }
@@ -460,7 +459,7 @@ void zeroing(void)
     } /// Keep other motors where they are
 
     Serial.print("Check 2: ");
-    print_lim_swithces( lims[0] , lims[1], lims[2] );
+    print_lim_switches( lims[0] , lims[1], lims[2] );
     delay(5);
     lims[1] = readGPIOFast(lim_switch_b);
   }
@@ -482,7 +481,7 @@ void zeroing(void)
     } /// Keep other motors where they are
 
     Serial.print("Check 3: ");
-    print_lim_swithces( lims[0] , lims[1], lims[2] );
+    print_lim_switches( lims[0] , lims[1], lims[2] );
     delay(5);
     lims[2] = readGPIOFast(lim_switch_c);
   }
@@ -507,12 +506,9 @@ bool readGPIOFast(int pin)
 }
 
 
-
-
 //****************************************    Print Functions       ****************************************
 
-// TODO: spelling (get the spell check extension in vscode if need be)
-void print_lim_swithces (bool a, bool b , bool c)
+void print_lim_switches (bool a, bool b , bool c)
 {
   Serial.print(a);
   Serial.print(b);
@@ -521,8 +517,7 @@ void print_lim_swithces (bool a, bool b , bool c)
 }
 
 
-// TODO: spelling
-void print_econder_values (void)
+void print_encoder_values (void)
 {
   // Encoder readout  
   for ( int i = 0; i < NUM_JOINTS; ++i)

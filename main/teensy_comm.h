@@ -4,7 +4,7 @@
  * @brief message structures for the teensy command and status messages.
  *
  * @author Riley Mark
- * @author Febuary 27, 2025
+ * @author February 27, 2025
  *
  ******************************************************************************/
 
@@ -16,8 +16,8 @@
 
 #define NUM_JOINTS 8
 #define NUM_EJCT_JOINTS 2
-#define RAD_PER_ENC_STEP 0.0314159265359 // TODO: someone update this   // Done but idk if it's right
-#define ENC_STEP_PER_RAD 31.8309886184 // TODO: same with this one      // Done but idk if it's right
+#define RAD_PER_ENC_STEP 0.0314159265359 // TODO: Rotation measurement accuracy test
+#define ENC_STEP_PER_RAD 31.8309886184 // TODO: Rotation measurement accuracy test
 #define CRC_POLY 1021
 #define CRC_INIT 0xFFFF 
 
