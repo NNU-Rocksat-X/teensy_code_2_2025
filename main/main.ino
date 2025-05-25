@@ -191,7 +191,8 @@ void loop(void) {
 
     for ( int ii = 0; ii < NUM_JOINTS - NUM_EJCT_JOINTS; ++ii) 
     {
-      tasks[ii].period = myStepper[ii].newFrequency(myEncoder[ii].read(), position_cmds[ii]);
+      tasks[ii].period = myStepper[ii].newFrequency(myEncoder[ii].read(), 
+                                                    position_cmds[ii]);
       //Serial.printf("motor %d  period = %lu µs\n", ii, tasks[ii].period);
     } 
 

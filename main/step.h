@@ -1,3 +1,6 @@
+/**
+ * TODO: write a file description
+ */
 #ifndef step_h
 #define step_h
 
@@ -5,15 +8,13 @@
 
 class Stepper{
   public:
-    Stepper(int _step_pin, int _dir_pin, int encoderResolution, int _motor_id);    // Deleted pramaters: int _enc_pin_A, int enc_pin_B,
+    Stepper(int _step_pin, int _dir_pin, int encoderResolution, int _motor_id, bool _closed_loop);    // Deleted pramaters: int _enc_pin_A, int enc_pin_B,
     void step();
     int newFrequency(double position, double desired_position);
-    int readEncoders();
-    void currentVelocity(int currentPosition);  // populates the current velocity values on all the instances of this class
     double current_velocity;
     double velocity;
     int motor_id;
-
+    bool closed_loop;
 
   private:
     int step_pin;
@@ -26,7 +27,6 @@ class Stepper{
     int deg_to_step(int deg);
     double pid_controller(double desired_angle, double current_angle);
 
-    double zero_position;
     double current_angle;
     double derivative;
     double integral;
@@ -34,9 +34,10 @@ class Stepper{
     double proportional_gain;
     double integral_gain;
     double derivative_gain;
+    double max_integral;
+
     double previous_error;
     int previous_time;
-    //double velocity;
     
 };
 
