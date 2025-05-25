@@ -95,14 +95,14 @@ uint32_t encoderValues[NUM_JOINTS];
 
 Stepper myStepper[] = 
 { 
-  Stepper(step_pin_1, dir_pin_1, 1000, 1),
-  Stepper(step_pin_2, dir_pin_2, 1000, 2),
-  Stepper(step_pin_3, dir_pin_3, 300, 3),
-  Stepper(step_pin_4, dir_pin_4, 300, 4),
-  Stepper(step_pin_5, dir_pin_5, 300, 5),
-  Stepper(step_pin_6, dir_pin_6, 300, 6),
-  Stepper(step_pin_extend_launcher, dir_pin_extend_launcher, 1000, 7),
-  Stepper(step_pin_launch_ball, dir_pin_launch_ball, 1000, 8)
+  Stepper(step_pin_1, dir_pin_1, 1000, 1, 1),
+  Stepper(step_pin_2, dir_pin_2, 1000, 2, 1),
+  Stepper(step_pin_3, dir_pin_3, 300, 3, 1),
+  Stepper(step_pin_4, dir_pin_4, 300, 4, 1),
+  Stepper(step_pin_5, dir_pin_5, 300, 5, 1),
+  Stepper(step_pin_6, dir_pin_6, 300, 6, 1),
+  Stepper(step_pin_extend_launcher, dir_pin_extend_launcher, 1000, 7, 0),
+  Stepper(step_pin_launch_ball, dir_pin_launch_ball, 1000, 8, 0)
 };
 
 
@@ -189,7 +189,7 @@ void loop(void) {
     // Serial Send
     send_status();
 
-    for ( int ii = 0; ii < NUM_JOINTS - NUM_EJCT_JOINTS; ++ii) 
+    for (int ii = 0; ii < NUM_JOINTS - NUM_EJCT_JOINTS; ++ii) 
     {
       tasks[ii].period = myStepper[ii].newFrequency(myEncoder[ii].read(), 
                                                     position_cmds[ii]);
@@ -217,7 +217,6 @@ void read_encoders()
   for(int ii = 0; ii < NUM_JOINTS - NUM_EJCT_JOINTS; ++ii) 
   { 
     encoder_positions[ii] = myEncoder[ii].read();
-
   }
 }
 
@@ -234,11 +233,17 @@ void initEncoders()
 }
 
 
-// Serial Function
+/**
+ * Receives bytes on serial port and pareses messages. 
+ * 
+ * @return int - 0 success, -1 too many bytes read, -2 message parse error,
+ *               OTHER: message type
+ */
 int receive_command() 
 {
   uint8_t buffer[1024] = { 0 };
   uint8_t bytes_received = 0;
+  int ret = 0;
 
   while (Serial1.available()) 
   {
@@ -255,18 +260,24 @@ int receive_command()
     // Only parse when a full message is received
     if (bytes_received == sizeof(tnsy_cmd))
     {
+      ret = parse_message(&buffer[0], bytes_received);
 
-      if (parse_message(&buffer[0], bytes_received) == 0) 
+      if (ret == 1) // TODO: make sure all messages are handled
       {
         for (int j = 0; j < NUM_JOINTS; ++j) 
         {
           position_cmds[j] = tnsy_cmd.setpoint_position[j];
         }
-
+        return 1;
       } 
+      else if (ret == 2)
+      {
+        // could put Zeroing function call
+        return 2;
+      }
       else 
       {
-        return 2;
+        return -2;
       }
     }
 
@@ -278,8 +289,8 @@ int receive_command()
 /**
  * @brief - parses incoming serial messages 
  * 
- * @return int - -2 did not pass header, -1 did not pass CRC, OTHER: num corresponding 
- *               to message type.
+ * @return int - -3 unknown message type, -2 did not pass header, -1 did not 
+ *               pass CRC, OTHER: message type.
  */
 int parse_message(const uint8_t* buf, int size) 
 {
@@ -302,18 +313,18 @@ int parse_message(const uint8_t* buf, int size)
       // Added message type support. TODO: add this to the jetson
       switch (tnsy_hdr.type)
       {
-        case 0x00:
+        case 0:
           // TODO: update Jetson with correct message type for generic command message.
           memcpy(&tnsy_cmd, buf, size - 2);
           return 0;
           break;
 
-        case 0x01:
+        case 1:
           memcpy(&tnsy_cmd, buf, size - 2);
           return 1;
           break;
 
-        case 0x02:
+        case 2:
           memcpy(&tnsy_zero, buf, size - 2);
           return 2;
           break;
@@ -396,9 +407,8 @@ bool stepToPos(int dirPin, int stepPin, int goal_step_num, int direction, int de
  */
 void motorISR(void) 
 {
-  for (int ii = 0; ii < NUM_JOINTS; ++ii) {
-
-    // skip uninitialized motors
+  for (int ii = 0; ii < NUM_JOINTS; ++ii) 
+  {
     if (tasks[ii].period == 0) 
     {
       continue;          
@@ -411,6 +421,11 @@ void motorISR(void)
     {
       myStepper[ii].step();       //call the step function
       tasks[ii].elapsedTime = 0;  //reset the elapsed time
+
+      if (ii > NUM_JOINTS - NUM_EJCT_JOINTS)
+      {
+        myStepper[ii].current_angle++;
+      }
     }
   }
 }

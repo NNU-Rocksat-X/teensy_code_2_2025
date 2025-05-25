@@ -1,9 +1,15 @@
 /**
- * TODO: write a file description
+ * Stepper class for PID control of stepper motors. 
+ * 
+ * @author Riley Mark
+ * @author December 12, 2022
  */
 #include "step.h"
-#include <Arduino.h>
+// #include <Arduino.h>
 
+/**
+ * Stepper class constructor 
+ */
 Stepper::Stepper (int _step_pin, 
                   int _dir_pin,  
                   int encoderResolution, 
@@ -58,6 +64,11 @@ void Stepper::step ()
 
 /**
  * The PID controller for the ARM motors.
+ * 
+ * @param desired_angle - position setpoint in encoder steps
+ * @param current_angle - current position of the motor in encoder steps
+ * 
+ * @return int - current instantaneous velocity of motor
  * 
  * TODO: Tune the PID controllers
  */
@@ -132,14 +143,20 @@ int Stepper::newFrequency(double position, double desired_position)
 {
   int velocity;
 
-  if (closed_loop)
-  {
-    velocity = pid_controller(desired_position, position);
-  }
+  velocity = pid_controller(desired_position, position);
 
-  // this is choosing the direction of the motors. If the motor spins out of 
-  // control its is likely that the encoder was wired backwards and can easily 
-  // be fixed by adding or removing the motor to this if statement
+  // TODO: Test the closed loop mode control of the final two joints before 
+  //       modifying this further.
+  // if (closed_loop)
+  // {
+  //   velocity = pid_controller(desired_position, position);
+  // }
+  // else
+  // {
+  //   velocity = pid_controller();
+  // }
+
+  /** TODO: Modify these based on motor polarity */
   if ( motor_id == 2 || motor_id == 3 || motor_id == 4 || motor_id == 6) 
   {  
     if (velocity > 0) 
