@@ -15,6 +15,7 @@
 #include <cstddef>
 
 #define NUM_JOINTS 8
+#define NUM_EJCT_JOINTS 2
 #define RAD_PER_ENC_STEP 0.0314159265359 // TODO: someone update this   // Done but idk if it's right
 #define ENC_STEP_PER_RAD 31.8309886184 // TODO: same with this one      // Done but idk if it's right
 #define CRC_POLY 1021
@@ -35,6 +36,11 @@ typedef struct _teensy_header_t
     uint16_t type;
 } teensy_header_t;
 
+/**
+ * Teensy command to set arm positions.
+ * 
+ * type = 0x01
+ */
 typedef struct _teensy_command_t
 {
     teensy_header_t hdr;
@@ -45,6 +51,21 @@ typedef struct _teensy_command_t
     uint16_t crc;
 } teensy_command_t;
 
+/**
+ * Teensy command to run the "zeroing" sequence
+ * 
+ * type = 0x02
+ */
+typedef struct _teensy_zero_command_t
+{
+    teensy_header_t hdr;
+
+    uint16_t crc;
+} teensy_zero_t;
+
+/**
+ * Teensy system status message  
+ */
 typedef struct _teensy_status_t
 {
     teensy_header_t hdr;
