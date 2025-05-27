@@ -24,25 +24,25 @@
 #define enc_pin_7B 0
 #define enc_pin_8B 0
 
-#define step_pin_1 0 //3
-#define step_pin_2 0 //5
+#define step_pin_1 3 
+#define step_pin_2 5 
 #define step_pin_3 7
 #define step_pin_4 9
 #define step_pin_5 11
 #define step_pin_6 13
 
-#define step_pin_extend_launcher 3 //36
-#define step_pin_launch_ball 5 //28
+#define step_pin_extend_launcher 36
+#define step_pin_launch_ball 28
 
-#define dir_pin_1 0 //2
-#define dir_pin_2 0 //4
+#define dir_pin_1 2
+#define dir_pin_2 4
 #define dir_pin_3 6
 #define dir_pin_4 8
 #define dir_pin_5 10
 #define dir_pin_6 12
 
-#define dir_pin_extend_launcher 2 //37
-#define dir_pin_launch_ball 4 //29
+#define dir_pin_extend_launcher 37
+#define dir_pin_launch_ball 29
 
 //    Zeroing pin will be in pins 39,40, and 41
 #define lim_switch_a 39
@@ -139,12 +139,19 @@ int main(void)
  * with a 8N1 communication scheme and a baud rate of 115200.
  */
 void setup(void) {
+  
+  Serial.begin(115200);
+  Serial.println("Setup will begin ");
+
   noInterrupts();
   pinMode(13, OUTPUT);
   initEncoders();
 
+  Serial.println("for loop: ");
+
   for (int ii = 0; ii < NUM_JOINTS; ++ii) 
   {
+    Serial.print(myStepper[ii].motor_id);
     tasks[ii].state = false;
     tasks[ii].elapsedTime = 0;
     tasks[ii].period = 1000000;
@@ -152,16 +159,16 @@ void setup(void) {
     // dont init the last two encoders
     if (myStepper[ii].motor_id == 7 || myStepper[ii].motor_id == 8)
     {
-      position_cmds[ii] = myEncoder[ii].read();
+      position_cmds[ii] = 0;
     }
-  }   // This used to not be a for loop      
+  }       
 
   Timer1.initialize(10);             // interrupt every 10 us
   Timer1.attachInterrupt(motorISR);  // motorISR is the ISR
   Timer1.start();
   
   Serial1.begin(115200, SERIAL_8N1);
-  Serial.begin(115200);
+  //Serial.begin(115200);
 
   Serial.println("Setup Complete");
 
@@ -196,8 +203,8 @@ void loop(void) {
       //Serial.printf("motor %d  period = %lu µs\n", ii, tasks[ii].period);
     } 
 
-    print_encoder_values();
-    //print_target_values();
+    //print_encoder_values();
+    print_target_values();
 
     delay(10);
   

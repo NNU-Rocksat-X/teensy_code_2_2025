@@ -45,7 +45,7 @@ typedef struct _teensy_command_t
 {
     teensy_header_t hdr;
 
-    uint16_t setpoint_position[NUM_JOINTS];
+    int16_t setpoint_position[NUM_JOINTS];
     uint16_t led_state;
 
     uint16_t crc;
@@ -70,7 +70,7 @@ typedef struct _teensy_status_t
 {
     teensy_header_t hdr;
 
-    uint16_t encoder[NUM_JOINTS];
+    int16_t encoder[NUM_JOINTS];
     uint16_t debug_feild_0;
     uint16_t debug_feild_1;
 
