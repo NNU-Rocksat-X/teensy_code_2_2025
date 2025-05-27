@@ -96,10 +96,10 @@ uint32_t encoderValues[NUM_JOINTS];
 Stepper myStepper[] = 
 { 
   Stepper(step_pin_1, dir_pin_1, 1000, 1, 1),
-  Stepper(step_pin_2, dir_pin_2, 1000, 2, 1),
-  Stepper(step_pin_3, dir_pin_3, 300, 3, 1),
+  Stepper(step_pin_2, dir_pin_2, 300, 2, 1),
+  Stepper(step_pin_3, dir_pin_3, 1000, 3, 1),
   Stepper(step_pin_4, dir_pin_4, 300, 4, 1),
-  Stepper(step_pin_5, dir_pin_5, 300, 5, 1),
+  Stepper(step_pin_5, dir_pin_5, 1000, 5, 1),
   Stepper(step_pin_6, dir_pin_6, 300, 6, 1),
   Stepper(step_pin_extend_launcher, dir_pin_extend_launcher, 1000, 7, 0),
   Stepper(step_pin_launch_ball, dir_pin_launch_ball, 1000, 8, 0)
