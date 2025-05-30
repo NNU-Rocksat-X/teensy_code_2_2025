@@ -15,7 +15,7 @@ class Stepper{
   public:
     double current_velocity;
     double velocity;
-    double current_angle;
+    double current_angle = 0;
     int motor_id;
     bool closed_loop;
 

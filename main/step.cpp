@@ -66,19 +66,19 @@ void Stepper::step ()
  * The PID controller for the ARM motors.
  * 
  * @param desired_angle - position setpoint in encoder steps
- * @param current_angle - current position of the motor in encoder steps
+ * @param current_pos - current position of the motor in encoder steps
  * 
  * @return int - current instantaneous velocity of motor
  * 
  * TODO: Tune the PID controllers
  */
-double Stepper::pid_controller(double desired_angle, double current_angle) 
+double Stepper::pid_controller(double desired_angle, double current_pos) 
 {
   double now_time = micros();
   double delta_time = now_time - previous_time;
   previous_time = now_time;
 
-  error = desired_angle - current_angle;
+  error = desired_angle - current_pos;
   integral += error;
   derivative = (error - previous_error) / delta_time;
 
@@ -111,21 +111,21 @@ double Stepper::pid_controller(double desired_angle, double current_angle)
  */
 int Stepper::deg_to_step(int deg) 
 {
-  if (motor_id == 2 || motor_id == 4) 
+  if (motor_id == 7 || motor_id == 8 ) 
   {
-    int temp_val = ((encoder_resolution * 4.0 * 6.0 * 6.0) / 360.0);
+    int temp_val = ( 1 / 360.0 );
     return temp_val * deg;
   } 
-  else if (motor_id == 1) 
+  else if (motor_id == 6 ) 
   {
-    int temp_val = ((encoder_resolution * 4.0 * 3.0) / 360.0);
-    return temp_val * deg;
-  } 
-  else 
-  {
-    int temp_val = ((encoder_resolution * 4.0 * 6.0) / 360.0);
+    int temp_val = ((encoder_resolution * 4.0 ) / 360.0);
     return temp_val * deg;
   }
+  else
+  {
+    int temp_val = ((encoder_resolution * 4.0 * 7.0 ) / 360.0);
+    return temp_val * deg;
+  } 
 }
 
 
