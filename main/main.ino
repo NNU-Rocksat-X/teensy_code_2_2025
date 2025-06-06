@@ -32,7 +32,7 @@
 #define step_pin_6 13
 
 #define step_pin_extend_launcher 28
-#define step_pin_launch_ball 36
+#define step_pin_launch_ball 37
 
 #define dir_pin_1 2
 #define dir_pin_2 4
@@ -42,12 +42,14 @@
 #define dir_pin_6 12
 
 #define dir_pin_extend_launcher 29
-#define dir_pin_launch_ball 37
+#define dir_pin_launch_ball 36
 
 //    Zeroing pin will be in pins 39,40, and 41
 #define lim_switch_a 39
 #define lim_switch_b 40
 #define lim_switch_c 41
+
+#define zeroing_timout_value 2000
 
 
 int32_t position_cmds[NUM_JOINTS];
@@ -95,14 +97,14 @@ uint32_t encoderValues[NUM_JOINTS];
 
 Stepper myStepper[] = 
 { 
-  Stepper(step_pin_1, dir_pin_1, 1000, 1, 0),
-  Stepper(step_pin_2, dir_pin_2, 300, 2, 1),
-  Stepper(step_pin_3, dir_pin_3, 1000, 3, 1),
-  Stepper(step_pin_4, dir_pin_4, 300, 4, 1),
-  Stepper(step_pin_5, dir_pin_5, 1000, 5, 1),
-  Stepper(step_pin_6, dir_pin_6, 300, 6, 1),
-  Stepper(step_pin_extend_launcher, dir_pin_extend_launcher, 1, 7, 0),
-  Stepper(step_pin_launch_ball, dir_pin_launch_ball, 1, 8, 0)
+  Stepper(step_pin_1, dir_pin_1, 1000,  1, 1),
+  Stepper(step_pin_2, dir_pin_2, 300,   2, 1),
+  Stepper(step_pin_3, dir_pin_3, 1000,  3, 1),
+  Stepper(step_pin_4, dir_pin_4, 300,   4, 1),
+  Stepper(step_pin_5, dir_pin_5, 1000,  5, 1),
+  Stepper(step_pin_6, dir_pin_6, 300,   6, 1),
+  Stepper(step_pin_extend_launcher, dir_pin_extend_launcher,  1, 7, 0),
+  Stepper(step_pin_launch_ball, dir_pin_launch_ball,          1, 8, 0)
 };
 
 
@@ -126,8 +128,8 @@ Encoder myEncoder[] = {
 int main(void) 
 {
   setup();
-  //motor_test();
-  //zeroing();
+  //motor_test(8, 5);   // (motor_choice, speed)  // motor_choice is 1-8, not 0-7
+  zeroing();
   loop();
 }
 
@@ -152,13 +154,12 @@ void setup(void) {
 
   for (int ii = 0; ii < NUM_JOINTS; ++ii) 
   {
-    Serial.print(myStepper[ii].motor_id);
     tasks[ii].state = false;
     tasks[ii].elapsedTime = 0;
     tasks[ii].period = 1000000;
     
     // dont init the last two encoders
-    if (myStepper[ii].motor_id == 7 || myStepper[ii].motor_id == 8)
+    if (myStepper[ii].motor_id == 7 || myStepper[ii].motor_id == 8)   // if (myStepper[ii].closed_loop)
     {
       position_cmds[ii] = 0;
     }
@@ -184,8 +185,9 @@ void setup(void) {
  * position setpoints, reads encoder positions, and sends status serial message
  * back to Jetson.
  */
-void loop(void) {
 
+void loop(void) 
+{
   while (1)
   {
     // Serial Receive
@@ -247,12 +249,15 @@ void read_encoders()
  */
 void initEncoders() 
 {
-  for (int kk = 0; kk < NUM_JOINTS - NUM_EJCT_JOINTS; ++kk) 
+  for (int kk = 0; kk < NUM_JOINTS; ++kk) 
   {
-    myEncoder[kk].write(0);
+    if (myStepper[kk].closed_loop)
+      myEncoder[kk].write(0);
+
+    if (!myStepper[kk].closed_loop)
+      encoder_positions[kk] = 0;  
   }
 }
-
 
 /**
  * Receives bytes on serial port and pareses messages. 
@@ -424,14 +429,14 @@ void motorISR(void)
 
       if (!myStepper[ii].closed_loop) // ajust angle of closed loop joints
       {
-        if(position_cmds[ii] - myStepper[ii].current_angle > 0.5)  // will have an error buffer of .5
+        if(position_cmds[ii] - myStepper[ii].current_angle > 0.5)  // will have an error buffer of .5 in either direction
           {
             myStepper[ii].current_angle++;
           }
         else if(position_cmds[ii] - myStepper[ii].current_angle < -0.5)
         {
           myStepper[ii].current_angle--;
-        }  // will have an error buffer of .5
+        }
       }
     }
   }
@@ -451,82 +456,60 @@ void motorISR(void)
  * 
  * @return int - 0 success, 1 timeout
  */
+
 void zeroing(void)
 {
-  bool lims[3] = {false};
-  int motor_speed = -5, i;
+  int motor_speed = -5;
 
-  while (!lims[0])
+  zeroing_loop(1, lim_switch_a, motor_speed, zeroing_timout_value); // Input motor number, not motor index
+  motor_reset();
+  zeroing_loop(3, lim_switch_b, motor_speed, zeroing_timout_value);
+  motor_reset();
+  zeroing_loop(5, lim_switch_c, motor_speed, zeroing_timout_value);
+  motor_reset();
+}
+
+void zeroing_loop(int motor, int limswitch, int motors_speed, int timeout)
+{
+  int ii, jj;
+
+  --motor;  // this makes it so that motor number is input not motor index
+
+  for (ii = 0; ii < zeroing_timout_value; ++ii)
   {
-    tasks[0].period = myStepper[0].newFrequency(myEncoder[0].read(), 
-                                                myEncoder[0].read() + motor_speed);
+    tasks[motor].period = myStepper[motor].newFrequency(myEncoder[motor].read(), myEncoder[motor].read() + motors_speed);
 
-    // Try to format your code so that its readable. One liners are typically a no-go
-    for (i = 0; i < NUM_JOINTS - NUM_EJCT_JOINTS; ++i) 
+    for (jj = 0; jj < NUM_JOINTS - NUM_EJCT_JOINTS; ++jj) 
     {
-      if (i != 0)
+      if (jj != motor)
       {
-        tasks[i].period = myStepper[i].newFrequency(myEncoder[i].read(), 0);     
-      } 
+        tasks[jj].period = myStepper[jj].newFrequency(myEncoder[jj].read(), 0);     
+      }
     } /// Keep other motors where they are
     
-    Serial.print("Check 1: ");
-    print_lim_switches( lims[0] , lims[1], lims[2] );
+    print_lim_switches(motor, false);
+
     delay(5);
-    lims[0] = readGPIOFast(lim_switch_a);
-  }
-
-  initEncoders();
-
-  while (!lims[1])
-  {
-    tasks[1].period = myStepper[1].newFrequency(myEncoder[1].read(), 
-                                                myEncoder[1].read() + motor_speed);
-    for (i = 0; i < NUM_JOINTS - NUM_EJCT_JOINTS; ++i) 
+    if (readGPIOFast(limswitch))
     {
-      if (i != 1)
-      {
-        tasks[i].period = myStepper[i].newFrequency( myEncoder[i].read(), 0);
-      } 
-    } /// Keep other motors where they are
-
-    Serial.print("Check 2: ");
-    print_lim_switches( lims[0] , lims[1], lims[2] );
-    delay(5);
-    lims[1] = readGPIOFast(lim_switch_b);
+      return;
+    }
   }
 
-  initEncoders();
+  print_lim_switches(motor, true);
 
-
-  while (!lims[2])
-  {
-    tasks[2].period = myStepper[2].newFrequency(myEncoder[2].read(), 
-                                                myEncoder[2].read() + motor_speed);
-
-    for (i = 0; i < NUM_JOINTS - NUM_EJCT_JOINTS; ++i) 
-    {
-      if (i != 2)
-      {
-        tasks[i].period = myStepper[i].newFrequency(myEncoder[i].read(), 0);
-      } 
-    } /// Keep other motors where they are
-
-    Serial.print("Check 3: ");
-    print_lim_switches( lims[0] , lims[1], lims[2] );
-    delay(5);
-    lims[2] = readGPIOFast(lim_switch_c);
-  }
-
-  initEncoders();
-
-  for (i = 1; i < NUM_JOINTS - NUM_EJCT_JOINTS; ++i) 
-  {
-    tasks[i].period = myStepper[i].newFrequency(myEncoder[i].read(), 0);
-  }  /// Keep all motors where they are
-
-  return;
 }
+
+void motor_reset()
+{
+  initEncoders();
+
+  for (int jj = 1; jj < NUM_JOINTS - NUM_EJCT_JOINTS; ++jj) 
+  {
+    tasks[jj].period = myStepper[jj].newFrequency(0, 0);
+  }  /// Keep all motors where they are
+}
+
 
 
 /**
@@ -543,11 +526,9 @@ bool readGPIOFast(int pin)
 //****************************************    Test Functions       ****************************************
 
 
-void motor_test()
+void motor_test(int tested_motor, int speed)
 {
-
-  int tested_motor = 8; // Chose 1-8, not 0-7
-  int speed = -10, i;
+  int i;
 
   --tested_motor;   // this is so that the above comment is true
 
@@ -578,12 +559,20 @@ void motor_test()
 
 //****************************************    Print Functions       ****************************************
 
-void print_lim_switches (bool a, bool b , bool c)
+void print_lim_switches (int motor_in, int failure)
 {
-  Serial.print(a);
-  Serial.print(b);
-  Serial.print(c);
-  Serial.println(" ");
+  if( failure )
+  {
+    Serial.print("Zeroing failed on motor ");
+    Serial.print(motor_in);
+    Serial.println(" ");
+  }
+  else
+  {
+    Serial.print("Check: ");
+    Serial.print(motor_in + 1);
+    Serial.println(" ");
+  }
 }
 
 
@@ -601,8 +590,7 @@ void print_encoder_values (void)
 
 void print_target_values (void)
 {
-  // Encoder readout  
-  for ( int i = 0; i < NUM_JOINTS - NUM_EJCT_JOINTS; ++i)
+  for ( int i = 0; i < NUM_JOINTS; ++i)
   {
     Serial.print(position_cmds[i]);
     Serial.print(" ");
