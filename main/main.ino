@@ -90,10 +90,6 @@ const int m6_period = 0;
 const int m7_period = 0;
 const int m8_period = 0;
 
-double velocities[NUM_JOINTS];
-
-uint32_t encoderValues[NUM_JOINTS];
-
 Stepper myStepper[] = 
 { 
   Stepper(step_pin_1, dir_pin_1, 1000,  1, 1),
@@ -129,7 +125,7 @@ int main(void)
   setup();
   //motor_test(6, -10);   // (motor_choice, speed)  // motor_choice is 1-8, not 0-7
   //zeroing();
-  new_pos(1, 100000);
+  //new_pos(1, 100000);
   loop();
 }
 
@@ -255,11 +251,11 @@ void motor_task()
 int get_position(int motor)
 {
   if (myStepper[motor].closed_loop)   // closed loop
-    return position_cmds[motor];
+    return encoder_positions[motor] = myEncoder[motor].read();
   else if (motor == 6)                // speicial command for joint 7, that allows it to get to the desired position, which is outside the current limit of the communcated values
-    return position_cmds[motor] * 10;
+    return encoder_positions[motor] = myStepper[motor].current_angle * 10;
   else                                // open loop
-    return position_cmds[motor];
+    return encoder_positions[motor] = myStepper[motor].current_angle;
 }
 
 
