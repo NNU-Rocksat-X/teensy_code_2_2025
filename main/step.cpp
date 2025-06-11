@@ -145,19 +145,9 @@ int Stepper::newFrequency(double position, double desired_position)
 
   velocity = pid_controller(desired_position, position);
 
-  // TODO: Test the closed loop mode control of the final two joints before 
-  //       modifying this further.
-  // if (closed_loop)
-  // {
-  //   velocity = pid_controller(desired_position, position);
-  // }
-  // else
-  // {
-  //   velocity = pid_controller();
-  // }
 
   /** TODO: Modify these based on motor polarity */
-  if ( motor_id == 2 || motor_id == 3 || motor_id == 4 || motor_id == 6) 
+  if ( motor_id == 1 || motor_id == 2 || motor_id == 4 || motor_id == 6) // Joints 1,2,4,6
   {  
     if (velocity > 0) 
     {

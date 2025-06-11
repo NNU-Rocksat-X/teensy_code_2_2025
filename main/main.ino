@@ -5,7 +5,6 @@
 #include <TimerOne.h>
 #include <imxrt.h> // Make sure Teensy core libraries are included
 
-
 #define enc_pin_1A 14
 #define enc_pin_2A 16
 #define enc_pin_3A 18
@@ -102,7 +101,7 @@ Stepper myStepper[] =
   Stepper(step_pin_3, dir_pin_3, 1000,  3, 1),
   Stepper(step_pin_4, dir_pin_4, 300,   4, 1),
   Stepper(step_pin_5, dir_pin_5, 1000,  5, 1),
-  Stepper(step_pin_6, dir_pin_6, 300,   6, 1),
+  Stepper(step_pin_6, dir_pin_6, 300,   6, 0),
   Stepper(step_pin_extend_launcher, dir_pin_extend_launcher,  1, 7, 0),
   Stepper(step_pin_launch_ball, dir_pin_launch_ball,          1, 8, 0)
 };
@@ -128,8 +127,9 @@ Encoder myEncoder[] = {
 int main(void) 
 {
   setup();
-  //motor_test(8, 5);   // (motor_choice, speed)  // motor_choice is 1-8, not 0-7
-  zeroing();
+  //motor_test(6, -10);   // (motor_choice, speed)  // motor_choice is 1-8, not 0-7
+  //zeroing();
+  new_pos(1, 100000);
   loop();
 }
 
@@ -149,8 +149,6 @@ void setup(void) {
   noInterrupts();
   pinMode(13, OUTPUT);
   initEncoders();
-
-  Serial.println("for loop: ");
 
   for (int ii = 0; ii < NUM_JOINTS; ++ii) 
   {
@@ -194,11 +192,13 @@ void loop(void)
     receive_command();
 
     // Read Encoders
-    read_encoders();
+    //read_encoders();
+
+    motor_task();
 
     // Serial Send
     send_status();
-
+/*
     for (int ii = 0; ii < NUM_JOINTS; ++ii) 
     {
       if (myStepper[ii].closed_loop)  // closed loop
@@ -206,14 +206,16 @@ void loop(void)
         tasks[ii].period = myStepper[ii].newFrequency(myEncoder[ii].read(), position_cmds[ii]);
       //Serial.printf("motor %d  period = %lu µs\n", ii, tasks[ii].period);
       }
+      else if (ii == 6)  // speicial command for joint 7, that allows it to get to the desired position, which is outside the current limit of the communcated values
+      {
+        tasks[ii].period = myStepper[ii].newFrequency(myStepper[ii].current_angle, position_cmds[ii] * 10);
+      }
       else  // open loop
       {
         tasks[ii].period = myStepper[ii].newFrequency(myStepper[ii].current_angle, position_cmds[ii]);
       }
-      //Serial.print(myStepper[ii].current_angle);
-      //Serial.print("     ");
     }
-    //Serial.println(" ");
+    */
 
     print_encoder_values();
     //print_target_values();
@@ -224,12 +226,10 @@ void loop(void)
 }
 
 
-
 //****************************************    Low Level Code       ****************************************
 
-
 /**
- * Reads the current position of all encoders
+ * Reads the current position of all encoders into myStepper
  */
 void read_encoders() 
 { 
@@ -242,6 +242,26 @@ void read_encoders()
       encoder_positions[ii] = myStepper[ii].current_angle;  
   }
 }
+
+void motor_task()
+{
+  for (int ii = 0; ii < NUM_JOINTS; ++ii) 
+  {
+    encoder_positions[ii] = get_position(ii);
+    tasks[ii].period = myStepper[ii].newFrequency(get_position(ii), position_cmds[ii]);
+  }
+}
+
+int get_position(int motor)
+{
+  if (myStepper[motor].closed_loop)   // closed loop
+    return position_cmds[motor];
+  else if (motor == 6)                // speicial command for joint 7, that allows it to get to the desired position, which is outside the current limit of the communcated values
+    return position_cmds[motor] * 10;
+  else                                // open loop
+    return position_cmds[motor];
+}
+
 
 
 /**
@@ -426,8 +446,19 @@ void motorISR(void)
     {
       myStepper[ii].step();       //call the step function
       tasks[ii].elapsedTime = 0;  //reset the elapsed time
-
-      if (!myStepper[ii].closed_loop) // ajust angle of closed loop joints
+      
+      if (myStepper[ii].motor_id == 7) // speicial *10 for special joint 7 funcitnallity, ask Elias, this is his stuipid work around, cuz he's to lazy to fix it as of right now, what a bum
+      {
+        if( (position_cmds[ii] * 10) - myStepper[ii].current_angle > 0.5)  // will have an error buffer of .5 in either direction
+          {
+            myStepper[ii].current_angle++;
+          }
+        else if((position_cmds[ii] * 10) - myStepper[ii].current_angle < -0.5)
+        {
+          myStepper[ii].current_angle--;
+        }
+      }
+      else if (!myStepper[ii].closed_loop) // ajust angle of closed loop joints
       {
         if(position_cmds[ii] - myStepper[ii].current_angle > 0.5)  // will have an error buffer of .5 in either direction
           {
@@ -442,81 +473,89 @@ void motorISR(void)
   }
 }
 
-
+//****************************************    Zeroing       ****************************************
 /**
- * TODO: find a way to stop receiving serial messages during this process. Or 
- *       architect the Jetson to not send new commands after starting this process.
- *       We would need to send an ack once this is done then.
- * 
- * TODO: Add failure mode returns. What happens if a joint doesn't get to the 
- *       position within a reasonable time? Move on with the mission or should 
- *       it try indefinitely? I put my recommendation for returns below. With
- *       how unreliable the Rocksat arms have been in the past, this should be a
- *       high priority task. 
- * 
- * @return int - 0 success, 1 timeout
+*
+*
  */
 
 void zeroing(void)
-{
+{                           //   How to move joint: position_cmds[motor] = pos;
   int motor_speed = -5;
 
   zeroing_loop(1, lim_switch_a, motor_speed, zeroing_timout_value); // Input motor number, not motor index
-  motor_reset();
   zeroing_loop(3, lim_switch_b, motor_speed, zeroing_timout_value);
-  motor_reset();
   zeroing_loop(5, lim_switch_c, motor_speed, zeroing_timout_value);
-  motor_reset();
 }
 
 void zeroing_loop(int motor, int limswitch, int motors_speed, int timeout)
 {
-  int ii, jj;
+  int ii;
 
   --motor;  // this makes it so that motor number is input not motor index
 
   for (ii = 0; ii < zeroing_timout_value; ++ii)
   {
-    tasks[motor].period = myStepper[motor].newFrequency(myEncoder[motor].read(), myEncoder[motor].read() + motors_speed);
+    //tasks[motor].period = myStepper[motor].newFrequency(myEncoder[motor].read(), myEncoder[motor].read() + motors_speed);
+    position_cmds[motor] = position_cmds[motor] + motors_speed;
+    motor_task();
 
-    for (jj = 0; jj < NUM_JOINTS - NUM_EJCT_JOINTS; ++jj) 
-    {
-      if (jj != motor)
-      {
-        tasks[jj].period = myStepper[jj].newFrequency(myEncoder[jj].read(), 0);     
-      }
-    } /// Keep other motors where they are
-    
     print_lim_switches(motor, false);
+    print_encoder_values();
 
     delay(5);
+
     if (readGPIOFast(limswitch))
     {
+      motor_reset();
       return;
     }
   }
 
   print_lim_switches(motor, true);
-
+  motor_reset();
 }
 
 void motor_reset()
 {
-  initEncoders();
-
-  for (int jj = 1; jj < NUM_JOINTS - NUM_EJCT_JOINTS; ++jj) 
+  for (int jj = 0; jj < NUM_JOINTS; ++jj) 
   {
-    tasks[jj].period = myStepper[jj].newFrequency(0, 0);
+    position_cmds[jj] = 0;
+
+    if (myStepper[jj].closed_loop)
+    {
+      myEncoder[jj].write(0);
+      tasks[jj].period = myStepper[jj].newFrequency(myEncoder[jj].read(), position_cmds[jj]);
+    }
+
+    if (!myStepper[jj].closed_loop)
+    {
+      encoder_positions[jj] = 0;  
+      tasks[jj].period = myStepper[jj].newFrequency(0, 0);
+    }
   }  /// Keep all motors where they are
 }
 
+void new_pos ( int motor, int goal_pos ) // input motor NUMBER not motor INDEX
+{
+  int cur_pos = 0;
 
+  --motor;
+  position_cmds[motor] = goal_pos;
 
-/**
- * This seems like a funny way to do this... Why not use Arduino's digitalRead()?
- * 
- * TODO: remove/revisit chatgpt code
- */
+  for (int i = 0; i < zeroing_timout_value; ++i)
+  {
+    motor_task();
+    cur_pos = get_position(motor);
+
+      if (abs(cur_pos - goal_pos) < 2) // will end function off as soon as it's within an error radius of 2
+      {
+        return;
+      }  
+  }
+  Serial.println("AHAHAHA, THIS MOVEMNET FAILED YOU DUMB NUT");
+}
+
 bool readGPIOFast(int pin) 
 {
   return *(portInputRegister(pin)) & digitalPinToBitMask(pin);
@@ -524,10 +563,12 @@ bool readGPIOFast(int pin)
 
 
 //****************************************    Test Functions       ****************************************
-
-
 void motor_test(int tested_motor, int speed)
 {
+  Serial.print("Testing Motor ");
+  Serial.print(tested_motor);
+  Serial.println(" ");
+
   int i;
 
   --tested_motor;   // this is so that the above comment is true
@@ -558,7 +599,6 @@ void motor_test(int tested_motor, int speed)
 
 
 //****************************************    Print Functions       ****************************************
-
 void print_lim_switches (int motor_in, int failure)
 {
   if( failure )
@@ -575,7 +615,6 @@ void print_lim_switches (int motor_in, int failure)
   }
 }
 
-
 void print_encoder_values (void)
 {
   // Encoder readout  
@@ -587,7 +626,6 @@ void print_encoder_values (void)
   Serial.println(" ");
 }
 
-
 void print_target_values (void)
 {
   for ( int i = 0; i < NUM_JOINTS; ++i)
@@ -598,7 +636,7 @@ void print_target_values (void)
   Serial.println(" ");
 }
 
-/*
+/**
 
 If the permission port permission error occurs, use the following commands on Jetson
 
