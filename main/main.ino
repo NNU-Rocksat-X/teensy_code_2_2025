@@ -123,8 +123,9 @@ Encoder myEncoder[] = {
 int main(void) 
 {
   setup();
-  //motor_test(6, -10);   // (motor_choice, speed)  // motor_choice is 1-8, not 0-7
-  //zeroing();
+  //motor_test(8, 10);   // (motor_choice, speed)  // motor_choice is 1-8, not 0-7
+  delay(8000);
+  zeroing();
   //new_pos(1, 100000);
   loop();
 }
@@ -476,15 +477,57 @@ void motorISR(void)
  */
 
 void zeroing(void)
-{                           //   How to move joint: position_cmds[motor] = pos;
-  int motor_speed = -5;
+{                           
+  int motor_speed = -1;  // this number will be mulipilied, dont go crazy
 
-  zeroing_loop(1, lim_switch_a, motor_speed, zeroing_timout_value); // Input motor number, not motor index
-  zeroing_loop(3, lim_switch_b, motor_speed, zeroing_timout_value);
-  zeroing_loop(5, lim_switch_c, motor_speed, zeroing_timout_value);
+  if(readGPIOFast(lim_switch_a))
+  {
+    zeroing_loop(motor_speed, 1000, false);
+  }
+
+  motor_speed = 1;
+
+  zeroing_loop(motor_speed, zeroing_timout_value, true);
+
+  //zeroing_loop_single(1, lim_switch_a, motor_speed, zeroing_timout_value); // Input motor number, not motor index
+  //zeroing_loop_single(3, lim_switch_b, motor_speed, zeroing_timout_value);
+  //zeroing_loop_single(5, lim_switch_c, motor_speed, zeroing_timout_value);
 }
 
-void zeroing_loop(int motor, int limswitch, int motors_speed, int timeout)
+void zeroing_loop(int motor_speed, int timeout, bool inwards)
+{
+
+  for (int ii = 0; ii < timeout; ++ii )
+  {
+    position_cmds[0] = position_cmds[0] + (5.0 * motor_speed);  /// These numbers make it so that the arm will rotate somewhat well while still grabbed onto ball
+    position_cmds[2] = position_cmds[2] + (2.8 * motor_speed); 
+    position_cmds[4] = position_cmds[4] - (3.5 * motor_speed);   
+
+    motor_task();
+
+    if (readGPIOFast(lim_switch_a) && inwards)
+    {
+      Serial.println("Zeoring Complete");
+      motor_reset();
+      return;
+    }
+    else if ((!readGPIOFast(lim_switch_a) && !inwards))
+    {
+      Serial.println("Zeoring Outward push complete");
+      motor_reset();
+      return;
+    }
+
+    Serial.print("Zeroing: ");
+    print_encoder_values();
+
+    delay(5);
+  }
+
+}
+
+
+void zeroing_loop_single(int motor, int limswitch, int motors_speed, int timeout)
 {
   int ii;
 
@@ -594,7 +637,7 @@ void motor_test(int tested_motor, int speed)
 }
 
 
-//****************************************    Print Functions       ****************************************
+//****************************************      Print Functions       ****************************************
 void print_lim_switches (int motor_in, int failure)
 {
   if( failure )
